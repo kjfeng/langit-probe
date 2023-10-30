@@ -11,6 +11,8 @@ import Post, { createPostKey } from '~/components/Post.tsx';
 import VirtualContainer from '~/components/VirtualContainer.tsx';
 import button from '~/styles/primitives/button.ts';
 
+import FeedbackInput from '~/components/FeedbackInput.tsx';
+
 export interface TimelineListProps {
 	uid: DID;
 	timeline: FeedResource;
@@ -122,15 +124,31 @@ const TimelineList = (props: TimelineListProps) => {
 					</Show>
 				</Match>
 
+
+
 				<Match when={getCollectionCursor(timeline(), 'cursor')}>
 					{(cursor) => (
-						<button
-							onClick={() => onLoadMore(cursor())}
-							disabled={timeline.loading}
-							class="flex h-13 items-center justify-center text-sm text-accent hover:bg-hinted disabled:pointer-events-none"
-						>
-							Show more posts
-						</button>
+						<div>
+							<div class="flex h-13 items-center px-4 my-3">
+								<FeedbackInput
+									onEnter={(next) => {
+										console.log(next)
+									}}
+								/>
+							</div>
+							<div class='flex h-13'>
+								<button
+									onClick={() => onLoadMore(cursor())}
+									disabled={timeline.loading}
+									class="text-sm text-accent hover:bg-hinted disabled:pointer-events-none w-full h-full"
+									// style="width: 100%;"
+								>
+									Show more posts
+								</button>
+							</div>
+						</div>
+
+
 					)}
 				</Match>
 

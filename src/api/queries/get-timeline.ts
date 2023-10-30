@@ -89,7 +89,7 @@ type LikeRecord = Records['app.bsky.feed.like'];
 // How many attempts it should try looking for more items before it gives up on empty pages.
 const MAX_EMPTY = 3;
 
-const MAX_POSTS = 20;
+const MAX_POSTS = 10;
 
 const countPosts = (slices: TimelineSlice[], limit?: number) => {
 	let count = 0;
