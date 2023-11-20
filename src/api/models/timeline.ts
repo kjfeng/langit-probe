@@ -2,6 +2,8 @@ import type { DID, RefOf } from '@externdefs/bluesky-client/atp-schema';
 
 import { type SignalizedPost, mergeSignalizedPost } from '../cache/posts.js';
 
+import OpenAI from "openai";
+
 type Post = RefOf<'app.bsky.feed.defs#postView'>;
 type TimelineItem = RefOf<'app.bsky.feed.defs#feedViewPost'>;
 type ReplyRef = RefOf<'app.bsky.feed.defs#replyRef'>;
@@ -191,3 +193,65 @@ export const createUnjoinedSlices = (
 
 	return slices;
 };
+
+const openai = new OpenAI({
+	apiKey: import.meta.env.VITE_API_KEY,
+	dangerouslyAllowBrowser: true
+});
+
+const sliceToNL = (item: TimelineSlice): string => {
+	let text = item.items[0].post.record.value.text
+	let time = item.items[0].post.record.value.createdAt
+	let authorAndHandle = item.items[0].post.author.displayName.value + " (" + item.items[0].post.author.handle.value + ")"
+
+	let fullText = authorAndHandle + " posted at " + time + " and said: " + text
+	return fullText
+}
+
+export const filterSlicesWithLLM = async (
+	slice: TimelineSlice[],
+	userTextInput: string
+): Promise<TimelineSlice[]>  => {
+	let sliceCopy = slice.slice()
+	let nlSlice = sliceCopy.map(sliceToNL)
+	let dataPrompt = ""
+
+	console.log("user input sent to LLM: " + userTextInput)
+
+	for (let i = 0; i < nlSlice.length; i++) {
+		dataPrompt += "Post " + i + ": " + nlSlice[i] + "\n\n"
+	}
+
+	let systemPrompt = `You are a bot on social media feeds that filters posts based on user preferences. The user has stated their preference as: ${userTextInput}. You are given a series of posts from a feed and you will identify posts that should be removed. When the user wants less  or fewer of something, reduce it but make sure to not remove it completely.  Posts should only be removed if they strongly conflict with user preferences. They stay if you think the user will not be strongly opposed to it.\n\nYou will refer to posts by the post number (just the number, no words). If you identify posts that should be removed, give me a list of post numbers, separated by commas, corresponding to those you think should be removed. If you think all the posts should stay, tell me \"None\". Do not respond with anything other than a list of comma-separated numbers or \"None\".`
+
+	let data = await openai.chat.completions.create({
+		messages: [{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": dataPrompt}],
+		model: "gpt-4",
+	})
+
+	let responseText = data.choices[0].message.content
+	console.log("LLM response: " + responseText)
+
+	if (!responseText || responseText === "None") {
+		return slice
+	}
+
+	let response = responseText.split(", ").map((x) => parseInt(x))
+	let returnSlice = []
+	for (let i = 0; i < response.length; i++) {
+		let index = response[i]
+		// validate indexes from LLM output
+		if (!index || index < 0 || index >= sliceCopy.length) {
+			// remove from array
+			response.splice(response.indexOf(index), 1)
+		}
+	}
+	for (let i = 0; i < sliceCopy.length; i++) {
+		if (!response.includes(i)) {
+			returnSlice.push(sliceCopy[i])
+		}
+	}
+
+	return returnSlice
+}

@@ -2,7 +2,7 @@ import { For, Match, Show, Switch } from 'solid-js';
 
 import type { DID } from '@externdefs/bluesky-client/atp-schema';
 
-import type { FeedLatestResource, FeedPageCursor, FeedResource } from '~/api/queries/get-timeline.ts';
+import { incrementRound, type FeedLatestResource, type FeedPageCursor, type FeedResource } from '~/api/queries/get-timeline.ts';
 
 import { getCollectionCursor } from '~/api/utils.ts';
 
@@ -131,14 +131,23 @@ const TimelineList = (props: TimelineListProps) => {
 						<div>
 							<div class="flex h-13 items-center px-4 my-3">
 								<FeedbackInput
-									onEnter={(next) => {
-										console.log(next)
+									onEnter={(input) => {
+										let ssEntry = input + ". "
+										if (!sessionStorage.getItem('cumulativeInput')) {
+											sessionStorage.setItem('cumulativeInput', ssEntry)
+										} else {
+											let existingFeedback = sessionStorage.getItem('cumulativeInput')
+											sessionStorage.setItem('cumulativeInput', existingFeedback + ssEntry)
+										}
 									}}
 								/>
 							</div>
 							<div class='flex h-13'>
 								<button
-									onClick={() => onLoadMore(cursor())}
+									onClick={() => {
+										onLoadMore(cursor())
+										incrementRound()
+									}}
 									disabled={timeline.loading}
 									class="text-sm text-accent hover:bg-hinted disabled:pointer-events-none w-full h-full"
 									// style="width: 100%;"

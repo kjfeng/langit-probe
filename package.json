@@ -17,6 +17,7 @@
 		"@solidjs/router": "^0.8.3",
 		"@thisbeyond/solid-dnd": "^0.7.4",
 		"immer": "^10.0.3",
+		"openai": "^4.19.0",
 		"solid-floating-ui": "^0.2.1",
 		"solid-js": "^1.8.4",
 		"solid-textarea-autosize": "^0.0.5",

@@ -47,6 +47,8 @@ createRoot(() => {
 			cl.toggle('is-dark', theme === 'dark');
 		}
 
+		sessionStorage.clear();
+
 		return theme;
 	});
 });

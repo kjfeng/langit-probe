@@ -14,6 +14,7 @@ import {
 	type TimelineSlice,
 	createTimelineSlices,
 	createUnjoinedSlices,
+	filterSlicesWithLLM,
 } from '../models/timeline.ts';
 
 import {
@@ -113,6 +114,13 @@ const countPosts = (slices: TimelineSlice[], limit?: number) => {
 	return count;
 };
 
+export const incrementRound = () => {
+	let round = sessionStorage.getItem('round')
+	if (round) {
+		sessionStorage.setItem('round', (parseInt(round) + 1).toString())
+	}
+}
+
 export const getTimelineKey = (uid: DID, params: TimelineParams, limit = MAX_POSTS) => {
 	return ['getFeed', uid, params, limit] as const;
 };
@@ -135,6 +143,10 @@ export const getTimeline: QueryFn<
 
 	let sliceFilter: SliceFilter | undefined | null;
 	let postFilter: PostFilter | undefined;
+
+	if (!sessionStorage.getItem('round')) {
+		sessionStorage.setItem('round', '0')
+	}
 
 	if (param) {
 		cursor = param.key;
@@ -190,11 +202,45 @@ export const getTimeline: QueryFn<
 		}
 	}
 
-	// we're still slicing by the amount of slices and not amount of posts
-	const spliced = countPosts(items, limit) + 1;
+	let itemsFiltered = items
 
-	const slices = items.slice(0, spliced);
-	const remaining = items.slice(spliced);
+	if (sessionStorage.getItem('round')) {
+		// only call LLM if it's not the first round
+		if (parseInt(sessionStorage.getItem('round')!) > 0) {
+
+			let userFeedbackInput = "Keep all posts"
+
+			if (sessionStorage.getItem('cumulativeInput')) {
+				userFeedbackInput = sessionStorage.getItem('cumulativeInput')!
+			}
+
+			let inputArray = userFeedbackInput.split(". ")
+			let latestInput = inputArray[inputArray.length - 1]
+
+			// TODO add in function here to classify latestInput into additive or subtractive
+			itemsFiltered = await filterSlicesWithLLM(items, userFeedbackInput)
+		}
+	}
+
+
+	// // we're still slicing by the amount of slices and not amount of posts
+	// const spliced = countPosts(items, limit) + 1;
+
+	// const slices = items.slice(0, spliced);
+	// const remaining = items.slice(spliced);
+
+	// const page: FeedPage = {
+	// 	cursor: cursor || remaining.length > 0 ? { key: cursor || null, remaining: remaining } : undefined,
+	// 	cid: cid,
+	// 	slices: slices,
+	// };
+
+	// return pushCollection(collection, page, param);
+
+	const spliced = countPosts(itemsFiltered, limit) + 1;
+
+	const slices = itemsFiltered.slice(0, spliced);
+	const remaining = itemsFiltered.slice(spliced);
 
 	const page: FeedPage = {
 		cursor: cursor || remaining.length > 0 ? { key: cursor || null, remaining: remaining } : undefined,
