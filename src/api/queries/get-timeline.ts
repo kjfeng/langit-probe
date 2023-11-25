@@ -1,6 +1,6 @@
 import type { Agent } from '@externdefs/bluesky-client/agent';
 import type { DID, Records, RefOf, ResponseOf } from '@externdefs/bluesky-client/atp-schema';
-import type { EnhancedResource, QueryFn } from '@intrnl/sq';
+import { createQuery, type EnhancedResource, type QueryFn } from '@intrnl/sq';
 
 import { multiagent } from '~/globals/agent.ts';
 import { systemLanguages } from '~/globals/platform.ts';
@@ -15,6 +15,7 @@ import {
 	createTimelineSlices,
 	createUnjoinedSlices,
 	filterSlicesWithLLM,
+	generateSearchQueriesWithLLM,
 } from '../models/timeline.ts';
 
 import {
@@ -203,10 +204,12 @@ export const getTimeline: QueryFn<
 	}
 
 	let itemsFiltered = items
+	let itemsAdded = []
 
-	if (sessionStorage.getItem('round')) {
+	if (sessionStorage.getItem('round') && type === 'home') {
 		// only call LLM if it's not the first round
-		if (parseInt(sessionStorage.getItem('round')!) > 0) {
+		const round = parseInt(sessionStorage.getItem('round')!)
+		if (round > 0) {
 
 			let userFeedbackInput = "Keep all posts"
 
@@ -219,6 +222,14 @@ export const getTimeline: QueryFn<
 
 			// TODO add in function here to classify latestInput into additive or subtractive
 			itemsFiltered = await filterSlicesWithLLM(items, userFeedbackInput)
+
+			let searchQueries = await generateSearchQueriesWithLLM(userFeedbackInput)
+			for (const query of searchQueries) {
+				let searchPage = await fetchPage(agent, { type: 'search', query: query }, 2, undefined)
+				const slices = createTimelineSlices(uid, searchPage.feed, undefined, undefined)
+				console.log(slices)
+				itemsAdded.push(...slices.slice(round * 2, round * 2 + 2))				
+			}
 		}
 	}
 
@@ -245,7 +256,7 @@ export const getTimeline: QueryFn<
 	const page: FeedPage = {
 		cursor: cursor || remaining.length > 0 ? { key: cursor || null, remaining: remaining } : undefined,
 		cid: cid,
-		slices: slices,
+		slices: [...slices, ...itemsAdded],
 	};
 
 	return pushCollection(collection, page, param);
