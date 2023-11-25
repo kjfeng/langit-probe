@@ -204,7 +204,7 @@ export const getTimeline: QueryFn<
 	}
 
 	let itemsFiltered = items
-	let itemsAdded = []
+	let additiveItems: TimelineSlice[] = []
 
 	if (sessionStorage.getItem('round') && type === 'home') {
 		// only call LLM if it's not the first round
@@ -221,15 +221,17 @@ export const getTimeline: QueryFn<
 			let latestInput = inputArray[inputArray.length - 1]
 
 			// TODO add in function here to classify latestInput into additive or subtractive
-			itemsFiltered = await filterSlicesWithLLM(items, userFeedbackInput)
-
 			let searchQueries = await generateSearchQueriesWithLLM(userFeedbackInput)
+			let itemsAdded = []
 			for (const query of searchQueries) {
 				let searchPage = await fetchPage(agent, { type: 'search', query: query }, 2, undefined)
 				const slices = createTimelineSlices(uid, searchPage.feed, undefined, undefined)
 				console.log(slices)
 				itemsAdded.push(...slices.slice(round * 2, round * 2 + 2))				
 			}
+
+			itemsFiltered = await filterSlicesWithLLM(items, userFeedbackInput)
+			additiveItems = await filterSlicesWithLLM(itemsAdded, userFeedbackInput)
 		}
 	}
 
@@ -256,7 +258,7 @@ export const getTimeline: QueryFn<
 	const page: FeedPage = {
 		cursor: cursor || remaining.length > 0 ? { key: cursor || null, remaining: remaining } : undefined,
 		cid: cid,
-		slices: [...slices, ...itemsAdded],
+		slices: [...slices, ...additiveItems],
 	};
 
 	return pushCollection(collection, page, param);
