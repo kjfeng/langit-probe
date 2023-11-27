@@ -216,7 +216,7 @@ export const filterSlicesWithLLM = async (
 	let nlSlice = sliceCopy.map(sliceToNL)
 	let dataPrompt = ""
 
-	console.log("user input sent to LLM: " + userTextInput)
+	console.log("user input sent to LLM (subtractive): " + userTextInput)
 
 	for (let i = 0; i < nlSlice.length; i++) {
 		dataPrompt += "Post " + i + ": " + nlSlice[i] + "\n\n"
@@ -259,14 +259,15 @@ export const filterSlicesWithLLM = async (
 export const generateSearchQueriesWithLLM = async (
 	userTextInput: string,
 ): Promise<string[]>  => {
-	let dataPrompt = `You are a bot on a social media platform. The user will write you a message that reflects their preferences. You will take a message that the user writes to you and provide a search query that can then be used in a platform-wide search feature to return content that is more aligned with the user's preferences. 
+	let dataPrompt = `You are a bot on a social media platform. The user will write you a message that reflects their preferences. You will take a message that the user writes to you and provide a search query that can then be used in a platform-wide search feature to return content that is more aligned with the user's preferences.
 
-	Return a comma separated list of search terms. Do not include any other punctuation. 
+	Return a comma separated list of search terms. Do not include any other punctuation. Keep this list to at most 3 terms.
+
 	The user's message is: ${userTextInput}
-	
+
 	The search query is:`
 
-	console.log("user input sent to LLM: " + userTextInput)
+	console.log("user input sent to LLM (additive): " + userTextInput)
 
 	// let systemPrompt = `You are a bot on social media feeds that filters posts based on user preferences. The user has stated their preference as: ${userTextInput}. You are given a series of posts from a feed and you will identify posts that should be removed. When the user wants less  or fewer of something, reduce it but make sure to not remove it completely.  Posts should only be removed if they strongly conflict with user preferences. They stay if you think the user will not be strongly opposed to it.\n\nYou will refer to posts by the post number (just the number, no words). If you identify posts that should be removed, give me a list of post numbers, separated by commas, corresponding to those you think should be removed. If you think all the posts should stay, tell me \"None\". Do not respond with anything other than a list of comma-separated numbers or \"None\".`
 
@@ -287,3 +288,31 @@ export const generateSearchQueriesWithLLM = async (
 
 	return responseText.split(", ")
 }
+
+export const classifyQueryWithLLM = async (
+	userTextInput: string,
+): Promise<string>  => {
+	let dataPrompt = `You are a bot on a social media platform. The user will write you a message that reflects their preferences. You will take the user's message and classify it as a request to add more content to the feed (additive) or remove content from the feed (subtractive). That is, classify the query as either "additive" or "subtractive". Do not output anything other than "additive" or "subtractive".
+
+	The user's message is: ${userTextInput}
+
+	The classification is:`
+
+	let data = await openai.chat.completions.create({
+		messages: [
+			// {"role": "system", "content": systemPrompt},
+			{"role": "user", "content": dataPrompt}
+		],
+		model: "gpt-4",
+	})
+
+	let responseText = data.choices[0].message.content
+	console.log("LLM classification of latest query: " + responseText)
+
+	if (!responseText || responseText === "None") {
+		return ""
+	}
+
+	return responseText
+}
+

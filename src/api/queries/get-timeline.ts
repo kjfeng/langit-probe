@@ -1,6 +1,6 @@
 import type { Agent } from '@externdefs/bluesky-client/agent';
 import type { DID, Records, RefOf, ResponseOf } from '@externdefs/bluesky-client/atp-schema';
-import { createQuery, type EnhancedResource, type QueryFn } from '@intrnl/sq';
+import { type EnhancedResource, type QueryFn } from '@intrnl/sq';
 
 import { multiagent } from '~/globals/agent.ts';
 import { systemLanguages } from '~/globals/platform.ts';
@@ -16,6 +16,7 @@ import {
 	createUnjoinedSlices,
 	filterSlicesWithLLM,
 	generateSearchQueriesWithLLM,
+	classifyQueryWithLLM,
 } from '../models/timeline.ts';
 
 import {
@@ -25,7 +26,7 @@ import {
 	finalizeModeration,
 } from '../moderation/action.ts';
 import { PreferenceHide } from '../moderation/enums.ts';
-import { type Collection, pushCollection } from '../utils.ts';
+import { type Collection, pushCollection, randomlyInsertArray } from '../utils.ts';
 
 import { fetchPost } from './get-post.ts';
 
@@ -141,6 +142,10 @@ export const getTimeline: QueryFn<
 	let cursor: string | null | undefined;
 	let items: TimelineSlice[] = [];
 	let count = 0;
+	let round = 0;
+	let variableLimit = limit
+	const FETCH_EXTENSION = 10
+	let postsToAdd = 3
 
 	let sliceFilter: SliceFilter | undefined | null;
 	let postFilter: PostFilter | undefined;
@@ -181,8 +186,36 @@ export const getTimeline: QueryFn<
 		postFilter = createLabelPostFilter(uid);
 	}
 
-	while (cursor !== null && count < limit) {
-		const timeline = await fetchPage(agent, params, limit, cursor);
+	// classification and setting of classified inputs object
+	if (sessionStorage.getItem('round') && type === 'home') {
+		round = parseInt(sessionStorage.getItem('round')!)
+		if (round > 0 && sessionStorage.getItem('cumulativeInput')) {
+			let userFeedbackInput = sessionStorage.getItem('cumulativeInput')!
+			let inputArray = userFeedbackInput.split(". ").filter(x => x)
+			let latestInput = inputArray[inputArray.length - 1]
+			console.log(latestInput)
+			let classification = await classifyQueryWithLLM(latestInput)
+			let classifiedInputsObj;
+
+			if (sessionStorage.getItem('classifiedInputs')) {
+				classifiedInputsObj = JSON.parse(sessionStorage.getItem('classifiedInputs')!)
+			} else {
+				classifiedInputsObj = {additive: [], subtractive: []}
+			}
+
+			if (classification === "additive") {
+				variableLimit = limit
+				classifiedInputsObj.additive.push(latestInput)
+			} else if (classification === "subtractive") {
+				variableLimit = limit + FETCH_EXTENSION
+				classifiedInputsObj.subtractive.push(latestInput)
+			}
+			sessionStorage.setItem('classifiedInputs', JSON.stringify(classifiedInputsObj))
+		}
+	}
+
+	while (cursor !== null && count < variableLimit) {
+		const timeline = await fetchPage(agent, params, variableLimit, cursor);
 
 		const feed = timeline.feed;
 		const result =
@@ -206,32 +239,50 @@ export const getTimeline: QueryFn<
 	let itemsFiltered = items
 	let additiveItems: TimelineSlice[] = []
 
-	if (sessionStorage.getItem('round') && type === 'home') {
-		// only call LLM if it's not the first round
-		const round = parseInt(sessionStorage.getItem('round')!)
-		if (round > 0) {
 
-			let userFeedbackInput = "Keep all posts"
+	if (sessionStorage.getItem('classifiedInputs')) {
+		// only call LLM if there are entries in classifiedInputs
 
-			if (sessionStorage.getItem('cumulativeInput')) {
-				userFeedbackInput = sessionStorage.getItem('cumulativeInput')!
+		// let cumulativeInput = sessionStorage.getItem('cumulativeInput')!
+		let classifiedInputsObj = JSON.parse(sessionStorage.getItem('classifiedInputs')!)
+		let subtractiveUserPrompt = ""
+		let additiveUserPrompt = ""
+
+		for (let i = 0; i < classifiedInputsObj.subtractive.length; i++) {
+			subtractiveUserPrompt += classifiedInputsObj.subtractive[i]
+		}
+		if (subtractiveUserPrompt) {
+			itemsFiltered = await filterSlicesWithLLM(items, subtractiveUserPrompt)
+		}
+
+		for (let i = 0; i < classifiedInputsObj.additive.length; i++) {
+			additiveUserPrompt += classifiedInputsObj.additive[i]
+		}
+		if (additiveUserPrompt) {
+			let searchIndex = 0
+			if (itemsFiltered.length < MAX_POSTS) {
+				postsToAdd = MAX_POSTS - itemsFiltered.length
 			}
-
-			let inputArray = userFeedbackInput.split(". ")
-			let latestInput = inputArray[inputArray.length - 1]
-
-			// TODO add in function here to classify latestInput into additive or subtractive
-			let searchQueries = await generateSearchQueriesWithLLM(userFeedbackInput)
-			let itemsAdded = []
+			if (sessionStorage.getItem('searchIndex')) {
+				searchIndex = parseInt(sessionStorage.getItem('searchIndex')!)
+			} else {
+				sessionStorage.setItem('searchIndex', '0')
+			}
+			let searchQueries = await generateSearchQueriesWithLLM(additiveUserPrompt)
+			let itemsAdded: TimelineSlice[] = []
 			for (const query of searchQueries) {
-				let searchPage = await fetchPage(agent, { type: 'search', query: query }, 2, undefined)
+				let searchPage = await fetchPage(agent, { type: 'search', query: query }, postsToAdd, undefined)
 				const slices = createTimelineSlices(uid, searchPage.feed, undefined, undefined)
-				console.log(slices)
-				itemsAdded.push(...slices.slice(round * 2, round * 2 + 2))				
-			}
+				// console.log(slices)
 
-			itemsFiltered = await filterSlicesWithLLM(items, userFeedbackInput)
-			additiveItems = await filterSlicesWithLLM(itemsAdded, userFeedbackInput)
+				if (slices.slice(searchIndex, searchIndex + postsToAdd)) {
+					itemsAdded.push(...slices.slice(searchIndex, searchIndex + postsToAdd))
+					sessionStorage.setItem('searchIndex', (searchIndex + postsToAdd).toString())
+				}
+			}
+			additiveItems = itemsAdded
+			console.log("found " + additiveItems.length + " posts to add")
+			// additiveItems = await filterSlicesWithLLM(itemsAdded, userFeedbackInput)
 		}
 	}
 
@@ -249,16 +300,32 @@ export const getTimeline: QueryFn<
 	// };
 
 	// return pushCollection(collection, page, param);
+	if (itemsFiltered.length + additiveItems.length > limit) {
+		itemsFiltered = itemsFiltered.slice(0, limit - additiveItems.length)
+	}
 
-	const spliced = countPosts(itemsFiltered, limit) + 1;
+	let mergedItems = randomlyInsertArray(itemsFiltered, additiveItems)
+	console.log("slice length of batch: " + mergedItems.length)
+	// if (mergedItems.length > limit) {
+	// 	mergedItems = mergedItems.slice(0, limit)
+	// }
 
-	const slices = itemsFiltered.slice(0, spliced);
-	const remaining = itemsFiltered.slice(spliced);
+	// const spliced = countPosts(itemsFiltered, limit) + 1;
+
+	// const slices = itemsFiltered.slice(0, spliced);
+	// const remaining = itemsFiltered.slice(spliced);
+
+	const spliced = countPosts(mergedItems, limit) + 1;
+
+	const slices = mergedItems.slice(0, spliced);
+	const remaining = mergedItems.slice(spliced);
+
+
 
 	const page: FeedPage = {
 		cursor: cursor || remaining.length > 0 ? { key: cursor || null, remaining: remaining } : undefined,
 		cid: cid,
-		slices: [...slices, ...additiveItems],
+		slices: slices,
 	};
 
 	return pushCollection(collection, page, param);

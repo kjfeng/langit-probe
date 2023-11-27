@@ -62,3 +62,32 @@ export const getCurrentDate = () => {
 
 	return date.toISOString();
 };
+
+// export const shuffleArray = <T>(array: T[]) => {
+// 	let currentIndex = array.length, randomIndex;
+
+// 	// While there remain elements to shuffle.
+// 	while (currentIndex > 0) {
+
+// 		// Pick a remaining element.
+// 		randomIndex = Math.floor(Math.random() * currentIndex);
+// 		currentIndex--;
+
+// 		// And swap it with the current element.
+// 		[array[currentIndex], array[randomIndex]] = [
+// 		array[randomIndex], array[currentIndex]];
+// 	}
+
+// 	return array;
+// }
+
+export const randomlyInsertArray = <T>(arrayOrig: T[], arrayNew: T[]) => {
+	let array = [...arrayOrig];
+	const lengthOrig = array.length;
+	for (let i = 0; i < arrayNew.length; i++) {
+		const insertAt = Math.floor(Math.random() * lengthOrig);
+		array.splice(insertAt, 0, arrayNew[i]);
+	}
+
+	return array;
+}
