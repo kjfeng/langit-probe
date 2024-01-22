@@ -16,6 +16,7 @@ export interface ChipProps {
 
 const FeedbackInput = (props: FeedbackInputProps) => {
 	const [chipValue, setChipValue] = createSignal<string>("");
+	const [outlineColor, setOutlineColor] = createSignal<string>("accent");
 	// createEffect(() => {
 	// 	props.value = chipValue();
 	// });
@@ -46,7 +47,7 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 			</div>
 
 
-			<div class="flex h-8 grow rounded-full bg-hinted outline-2 -outline-offset-1 outline-accent outline-none focus-within:outline dark:bg-[#202327]">
+			<div class={`flex h-8 grow rounded-full bg-hinted outline-2 -outline-offset-1 outline-${outlineColor()} outline-none focus-within:outline dark:bg-[#202327]`}>
 				<input
 					type="text"
 					value={chipValue() ?? ''}
@@ -54,8 +55,11 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 					onKeyDown={(ev) => {
 						const value = ev.currentTarget.value;
 
-						if (ev.key === 'Enter') {
+						if (ev.key === 'Enter' && value) {
 							props.onEnter(value);
+							setOutlineColor("[#059669]")
+						} else {
+							setOutlineColor("accent")
 						}
 					}}
 					// onBlur={(ev) => {
@@ -74,11 +78,14 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 						const btn = ev.currentTarget;
 						const input = btn.parentElement?.querySelector('input');
 
-						if (input) {
+						if (input && input.value) {
 							props.onEnter(input.value);
+							setOutlineColor("[#059669]")
+						} else {
+							setOutlineColor("accent")
 						}
 					}}
-					class="pl-2 pr-2 text-muted-fg hover:text-primary peer-placeholder-shown:hidden focus:text-accent"
+					class="pl-2 pr-2 text-muted-fg hover:text-primary peer-placeholder-shown:hidden"
 				>
 					<CheckIcon />
 				</button>
