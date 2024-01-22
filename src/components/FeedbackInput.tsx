@@ -1,6 +1,6 @@
 // import CloseIcon from '~/icons/baseline-close';
 import CheckIcon from '~/icons/baseline-check';
-import { createSignal, createEffect } from 'solid-js';
+import { createSignal } from 'solid-js';
 
 export interface FeedbackInputProps {
 	value?: string;
@@ -58,7 +58,15 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 							props.onEnter(value);
 						}
 					}}
+					// onBlur={(ev) => {
+					// 	const value = ev.currentTarget.value;
+					// 	// make sure input is not empty
+					// 	if (value !== '.') {
+					// 		props.onEnter(value);
+					// 	}
+					// }}
 					class="peer grow bg-transparent pl-4 text-sm text-primary outline-none placeholder:text-muted-fg"
+
 				/>
 
 				<button
@@ -70,7 +78,7 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 							props.onEnter(input.value);
 						}
 					}}
-					class="pl-2 pr-2 text-muted-fg hover:text-primary peer-placeholder-shown:hidden"
+					class="pl-2 pr-2 text-muted-fg hover:text-primary peer-placeholder-shown:hidden focus:text-accent"
 				>
 					<CheckIcon />
 				</button>

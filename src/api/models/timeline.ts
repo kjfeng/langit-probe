@@ -4,6 +4,8 @@ import { type SignalizedPost, mergeSignalizedPost } from '../cache/posts.js';
 
 import OpenAI from "openai";
 
+const MODEL = "gpt-4-1106-preview"
+
 type Post = RefOf<'app.bsky.feed.defs#postView'>;
 type TimelineItem = RefOf<'app.bsky.feed.defs#feedViewPost'>;
 type ReplyRef = RefOf<'app.bsky.feed.defs#replyRef'>;
@@ -69,6 +71,22 @@ export const mergeSignalizedTimelineItem = (
 // TimelineSlice
 export interface TimelineSlice {
 	items: SignalizedTimelineItem[];
+}
+
+export interface InputCategorization {
+	additive: string;
+	subtractive: string;
+}
+
+export interface JSONSliceItem {
+	id: string;
+	bodyText: string;
+	time: string;
+	author: string | undefined;
+	handle: string;
+	repost: boolean;
+	repostAuthor?: string | undefined;
+	repostHandle?: string;
 }
 
 export type SliceFilter = (slice: TimelineSlice) => boolean | TimelineSlice[];
@@ -205,7 +223,30 @@ const sliceToNL = (item: TimelineSlice): string => {
 	let authorAndHandle = item.items[0].post.author.displayName.value + " (" + item.items[0].post.author.handle.value + ")"
 
 	let fullText = authorAndHandle + " posted at " + time + " and said: " + text
+	if (item.items[0].reason && item.items[0].reason.$type === 'app.bsky.feed.defs#reasonRepost') {
+		let repostAuthorAndHandle = item.items[0].reason.by.displayName + " (" + item.items[0].reason.by.handle + ")"
+		fullText += ". This was reposted by " + repostAuthorAndHandle
+	}
+
 	return fullText
+}
+
+const slicetoJSON = (item: TimelineSlice): JSONSliceItem => {
+	let text = item.items[0].post.record.value.text
+	let time = item.items[0].post.record.value.createdAt
+	let author = item.items[0].post.author.displayName.value
+	let handle = item.items[0].post.author.handle.value
+
+	// assign any type to dynamically add keys
+	let sliceObj: JSONSliceItem = {id: "", bodyText: text, time: time, author: author, handle: handle, repost: false}
+
+	if (item.items[0].reason && item.items[0].reason.$type === 'app.bsky.feed.defs#reasonRepost') {
+		sliceObj.repost = true
+		sliceObj.repostAuthor = item.items[0].reason.by.displayName
+		sliceObj.repostHandle = item.items[0].reason.by.handle
+	}
+
+	return sliceObj
 }
 
 export const filterSlicesWithLLM = async (
@@ -227,7 +268,7 @@ export const filterSlicesWithLLM = async (
 	let data = await openai.chat.completions.create({
 		messages: [{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": dataPrompt}],
-		model: "gpt-4",
+		model: MODEL,
 	})
 
 	let responseText = data.choices[0].message.content
@@ -256,6 +297,49 @@ export const filterSlicesWithLLM = async (
 	return returnSlice
 }
 
+export const filterSlicesWithLLM_json = async (
+	slice: TimelineSlice[],
+	userTextInput: string
+): Promise<{returnSlice: TimelineSlice[], removedIndices: number[]}>  => {
+	let sliceCopy = slice.slice()
+	let jsonSlice = sliceCopy.map(slicetoJSON)
+
+	console.log("user input sent to LLM (subtractive): " + userTextInput)
+
+	for (let i = 0; i < jsonSlice.length; i++) {
+		jsonSlice[i].id = "" + i
+	}
+
+	let systemPrompt = `You are a bot on social media feeds that filters posts based on user preferences. You are given a series of posts from a feed as a JSON array. Each element in the array represents one post and its associated metadata. You will identify posts that should be removed based on stated user preferences and remove those corresponding elements in the JSON array. This will be filtered array. When removing each post, keep track of the array index of each removed post. This will be the removed indices array.
+
+	When the user specifies they want less or fewer of something, reduce it but make sure to not remove it completely.  Posts should only be removed if they strongly conflict with user preferences. They stay if you think the user will not be strongly opposed to it. If you believe there is nothing to be removed, the filtered array will just be the same as the input JSON array.
+
+	You will return a stringified JSON object with two fields, returnSlice and removedIndices. The returnSlice field should be the filtered array. The removedIndices should be the removed indices array containing original indices of removed posts. Don't apply formatting with backticks, just start and end your response with curly braces from the JSON object.`
+
+	let dataPrompt = `The user’s stated preference is: ${userTextInput}. The JSON array is: ${JSON.stringify(jsonSlice)}}`
+
+	let data = await openai.chat.completions.create({
+		messages: [{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": dataPrompt}],
+		model: MODEL,
+	})
+
+	let responseText = data.choices[0].message.content
+	console.log("LLM response: " + responseText)
+
+	if (!responseText) {
+		return {returnSlice: slice, removedIndices: []}
+	}
+
+	let returnSliceObj = JSON.parse(responseText)
+
+	if (returnSliceObj.returnSlice && returnSliceObj.removedIndices) {
+		return returnSliceObj
+	} else {
+		throw new Error("LLM response did not contain returnSlice or removedIndices")
+	}
+}
+
 export const generateSearchQueriesWithLLM = async (
 	userTextInput: string,
 ): Promise<string[]>  => {
@@ -276,7 +360,7 @@ export const generateSearchQueriesWithLLM = async (
 			// {"role": "system", "content": systemPrompt},
 			{"role": "user", "content": dataPrompt}
 		],
-		model: "gpt-4",
+		model: MODEL,
 	})
 
 	let responseText = data.choices[0].message.content
@@ -303,7 +387,7 @@ export const classifyQueryWithLLM = async (
 			// {"role": "system", "content": systemPrompt},
 			{"role": "user", "content": dataPrompt}
 		],
-		model: "gpt-4",
+		model: MODEL,
 	})
 
 	let responseText = data.choices[0].message.content
@@ -316,3 +400,29 @@ export const classifyQueryWithLLM = async (
 	return responseText
 }
 
+export const categorizeQueryWithLLM = async (
+	userTextInput: string,
+): Promise<InputCategorization> => {
+	let systemPrompt = `You are a bot on a social media platform. The user will write you a message that reflects their preferences. This message may contain desires to remove content (which we will call subtractive desires) and add more content (which we will call additive desires). You will rewrite the user’s input as two strings to separate the additive and subtractive desires. Return a JSON object with two fields, “additive” and “subtractive”, with additive desires in the “additive” field and subtractive desires in the “subtractive” field.
+
+	When rewriting, keep the same tone and style of writing as the original message. It is possible the user may only express one type of desire. If this is the case, assign an empty string to the desire not expressed by the user. Do not return anything except for the stringified JSON object with the two fields. Don't apply formatting with backticks, just start and end your response with curly braces from the JSON object.`
+
+	let dataPrompt = `The user's message is: ${userTextInput}`
+
+	let data = await openai.chat.completions.create({
+		messages: [
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": dataPrompt}
+		],
+		model: MODEL,
+	})
+
+	let responseText = data.choices[0].message.content
+	console.log("LLM categorization json: " + responseText)
+
+	if (!responseText) {
+		return {additive: "", subtractive: ""}
+	}
+
+	return JSON.parse(responseText)
+}

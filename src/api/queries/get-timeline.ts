@@ -16,7 +16,7 @@ import {
 	createUnjoinedSlices,
 	filterSlicesWithLLM,
 	generateSearchQueriesWithLLM,
-	classifyQueryWithLLM,
+	categorizeQueryWithLLM
 } from '../models/timeline.ts';
 
 import {
@@ -188,29 +188,49 @@ export const getTimeline: QueryFn<
 
 	// classification and setting of classified inputs object
 	if (sessionStorage.getItem('round') && type === 'home') {
+
 		round = parseInt(sessionStorage.getItem('round')!)
 		if (round > 0 && sessionStorage.getItem('cumulativeInput')) {
 			let userFeedbackInput = sessionStorage.getItem('cumulativeInput')!
 			let inputArray = userFeedbackInput.split(". ").filter(x => x)
 			let latestInput = inputArray[inputArray.length - 1]
 			console.log(latestInput)
-			let classification = await classifyQueryWithLLM(latestInput)
-			let classifiedInputsObj;
+			// let classification = await classifyQueryWithLLM(latestInput)
+			// let classifiedInputsObj;
 
-			if (sessionStorage.getItem('classifiedInputs')) {
-				classifiedInputsObj = JSON.parse(sessionStorage.getItem('classifiedInputs')!)
+			// if (sessionStorage.getItem('classifiedInputs')) {
+			// 	classifiedInputsObj = JSON.parse(sessionStorage.getItem('classifiedInputs')!)
+			// } else {
+			// 	classifiedInputsObj = {additive: [], subtractive: []}
+			// }
+
+			// if (classification === "additive") {
+			// 	variableLimit = limit
+			// 	classifiedInputsObj.additive.push(latestInput)
+			// } else if (classification === "subtractive") {
+			// 	variableLimit = limit + FETCH_EXTENSION
+			// 	classifiedInputsObj.subtractive.push(latestInput)
+			// }
+			// sessionStorage.setItem('classifiedInputs', JSON.stringify(classifiedInputsObj))
+			let categorizationObj = await categorizeQueryWithLLM(latestInput)
+			let currCategorization
+			if (sessionStorage.getItem('categorizedInputs')) {
+				currCategorization = JSON.parse(sessionStorage.getItem('categorizedInputs')!)
 			} else {
-				classifiedInputsObj = {additive: [], subtractive: []}
+				currCategorization = {additive: [], subtractive: []}
 			}
 
-			if (classification === "additive") {
-				variableLimit = limit
-				classifiedInputsObj.additive.push(latestInput)
-			} else if (classification === "subtractive") {
-				variableLimit = limit + FETCH_EXTENSION
-				classifiedInputsObj.subtractive.push(latestInput)
+			if (categorizationObj.additive) {
+				currCategorization.additive.push(categorizationObj.additive)
 			}
-			sessionStorage.setItem('classifiedInputs', JSON.stringify(classifiedInputsObj))
+
+			if (categorizationObj.subtractive) {
+				variableLimit = limit + FETCH_EXTENSION
+				currCategorization.subtractive.push(categorizationObj.subtractive)
+			}
+
+			sessionStorage.setItem('categorizedInputs', JSON.stringify(currCategorization))
+
 		}
 	}
 
@@ -240,23 +260,23 @@ export const getTimeline: QueryFn<
 	let additiveItems: TimelineSlice[] = []
 
 
-	if (sessionStorage.getItem('classifiedInputs')) {
-		// only call LLM if there are entries in classifiedInputs
+	if (sessionStorage.getItem('categorizedInputs') && type === 'home') {
+		// only call LLM if there are entries in categorizedInputs
 
 		// let cumulativeInput = sessionStorage.getItem('cumulativeInput')!
-		let classifiedInputsObj = JSON.parse(sessionStorage.getItem('classifiedInputs')!)
+		let categorizedInputsObj = JSON.parse(sessionStorage.getItem('categorizedInputs')!)
 		let subtractiveUserPrompt = ""
 		let additiveUserPrompt = ""
 
-		for (let i = 0; i < classifiedInputsObj.subtractive.length; i++) {
-			subtractiveUserPrompt += classifiedInputsObj.subtractive[i]
+		for (let i = 0; i < categorizedInputsObj.subtractive.length; i++) {
+			subtractiveUserPrompt += categorizedInputsObj.subtractive[i] + ". "
 		}
 		if (subtractiveUserPrompt) {
 			itemsFiltered = await filterSlicesWithLLM(items, subtractiveUserPrompt)
 		}
 
-		for (let i = 0; i < classifiedInputsObj.additive.length; i++) {
-			additiveUserPrompt += classifiedInputsObj.additive[i]
+		for (let i = 0; i < categorizedInputsObj.additive.length; i++) {
+			additiveUserPrompt += categorizedInputsObj.additive[i] + ". "
 		}
 		if (additiveUserPrompt) {
 			let searchIndex = 0
@@ -273,7 +293,6 @@ export const getTimeline: QueryFn<
 			for (const query of searchQueries) {
 				let searchPage = await fetchPage(agent, { type: 'search', query: query }, postsToAdd, undefined)
 				const slices = createTimelineSlices(uid, searchPage.feed, undefined, undefined)
-				// console.log(slices)
 
 				if (slices.slice(searchIndex, searchIndex + postsToAdd)) {
 					itemsAdded.push(...slices.slice(searchIndex, searchIndex + postsToAdd))
@@ -319,6 +338,8 @@ export const getTimeline: QueryFn<
 
 	const slices = mergedItems.slice(0, spliced);
 	const remaining = mergedItems.slice(spliced);
+
+	console.log(slices)
 
 
 
