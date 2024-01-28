@@ -18,6 +18,8 @@ import DeleteIcon from '~/icons/baseline-delete.tsx';
 import AddIcon from '~/icons/baseline-add.tsx';
 import VirtualContainer from './VirtualContainer';
 
+import FeedbackInput from '~/components/FeedbackInput.tsx';
+
 export interface FeedListProps {
 	uid: DID;
 	feeds: EnhancedResource<Collection<FeedsPage>, string>;
@@ -137,8 +139,8 @@ const FeedList = (props: FeedListProps) => {
 				<Match when={getCollectionCursor(feeds(), 'cursor')}>
 					{(cursor) => (
 						<button
-							onClick={() => onLoadMore(cursor())}
-							class="flex h-13 items-center justify-center text-sm text-accent hover:bg-hinted disabled:pointer-events-none"
+						onClick={() => onLoadMore(cursor())}
+						class="flex h-13 items-center justify-center text-sm text-accent hover:bg-hinted disabled:pointer-events-none"
 						>
 							Show more
 						</button>

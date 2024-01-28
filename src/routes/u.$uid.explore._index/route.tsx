@@ -32,6 +32,7 @@ import SettingsIcon from '~/icons/baseline-settings.tsx';
 
 import TrendingSection from './TrendingSection.tsx';
 
+
 const MAX_POSTS = 6;
 
 const AuthenticatedExplorePage = () => {
@@ -256,6 +257,7 @@ const AuthenticatedExplorePage = () => {
 										>
 											Show more
 										</a>
+
 									</Show>
 								</Match>
 

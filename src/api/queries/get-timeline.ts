@@ -150,6 +150,8 @@ export const getTimeline: QueryFn<
 	let sliceFilter: SliceFilter | undefined | null;
 	let postFilter: PostFilter | undefined;
 
+	console.log(type)
+
 	if (!sessionStorage.getItem('round')) {
 		sessionStorage.setItem('round', '0')
 	}
@@ -187,7 +189,7 @@ export const getTimeline: QueryFn<
 	}
 
 	// classification and setting of classified inputs object
-	if (sessionStorage.getItem('round') && type === 'home') {
+	if (sessionStorage.getItem('round') && (type === 'home' || type === 'feed')) {
 
 		round = parseInt(sessionStorage.getItem('round')!)
 		if (round > 0 && sessionStorage.getItem('cumulativeInput')) {
@@ -260,7 +262,7 @@ export const getTimeline: QueryFn<
 	let additiveItems: TimelineSlice[] = []
 
 
-	if (sessionStorage.getItem('categorizedInputs') && type === 'home') {
+	if (sessionStorage.getItem('categorizedInputs') && (type === 'home' || type === 'feed')) {
 		// only call LLM if there are entries in categorizedInputs
 
 		// let cumulativeInput = sessionStorage.getItem('cumulativeInput')!
@@ -395,9 +397,16 @@ const fetchPage = async (
 	const type = params.type;
 
 	if (type === 'home') {
-		const response = await agent.rpc.get('app.bsky.feed.getTimeline', {
+		// const response = await agent.rpc.get('app.bsky.feed.getTimeline', {
+		// 	params: {
+		// 		algorithm: params.algorithm,
+		// 		cursor: cursor,
+		// 		limit: limit,
+		// 	},
+		// });
+		const response = await agent.rpc.get('app.bsky.feed.getFeed', {
 			params: {
-				algorithm: params.algorithm,
+				feed: "at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot",
 				cursor: cursor,
 				limit: limit,
 			},
@@ -412,6 +421,7 @@ const fetchPage = async (
 				limit: limit,
 			},
 		});
+		console.log(params.uri)
 
 		return response.data;
 	} else if (type === 'list') {

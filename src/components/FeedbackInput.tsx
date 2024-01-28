@@ -1,6 +1,10 @@
 // import CloseIcon from '~/icons/baseline-close';
 import CheckIcon from '~/icons/baseline-check';
+import VisibilityIcon from '~/icons/baseline-visibility';
 import { createSignal } from 'solid-js';
+import { openModal } from '~/globals/modals.tsx';
+import ExplainDialog from '~/components/dialogs/ExplainDialog.tsx'
+
 
 export interface FeedbackInputProps {
 	value?: string;
@@ -13,10 +17,9 @@ export interface ChipProps {
 }
 
 
-
 const FeedbackInput = (props: FeedbackInputProps) => {
 	const [chipValue, setChipValue] = createSignal<string>("");
-	const [outlineColor, setOutlineColor] = createSignal<string>("accent");
+	const [outlineColor, setOutlineColor] = createSignal<string>("outline-accent");
 	// createEffect(() => {
 	// 	props.value = chipValue();
 	// });
@@ -47,7 +50,7 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 			</div>
 
 
-			<div class={`flex h-8 grow rounded-full bg-hinted outline-2 -outline-offset-1 outline-${outlineColor()} outline-none focus-within:outline dark:bg-[#202327]`}>
+			<div class={`flex h-8 grow rounded-full bg-hinted outline-2 -outline-offset-1 ${outlineColor()} outline-none focus-within:outline dark:bg-[#202327]`}>
 				<input
 					type="text"
 					value={chipValue() ?? ''}
@@ -57,9 +60,9 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 
 						if (ev.key === 'Enter' && value) {
 							props.onEnter(value);
-							setOutlineColor("[#059669]")
+							setOutlineColor("outline-[#059669]")
 						} else {
-							setOutlineColor("accent")
+							setOutlineColor("outline-accent")
 						}
 					}}
 					// onBlur={(ev) => {
@@ -73,6 +76,8 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 
 				/>
 
+
+
 				<button
 					onClick={(ev) => {
 						const btn = ev.currentTarget;
@@ -80,14 +85,30 @@ const FeedbackInput = (props: FeedbackInputProps) => {
 
 						if (input && input.value) {
 							props.onEnter(input.value);
-							setOutlineColor("[#059669]")
+							setOutlineColor("outline-[#059669]")
 						} else {
-							setOutlineColor("accent")
+							setOutlineColor("outline-accent")
 						}
 					}}
 					class="pl-2 pr-2 text-muted-fg hover:text-primary peer-placeholder-shown:hidden"
 				>
 					<CheckIcon />
+				</button>
+
+				<button
+					onClick={() => {
+						let additive: string[] = []
+						let subtractive: string[] = []
+						if (sessionStorage.getItem('categorizedInputs')) {
+							let currCategorization = JSON.parse(sessionStorage.getItem('categorizedInputs')!)
+							additive = currCategorization.additive
+							subtractive = currCategorization.subtractive
+						}
+
+						openModal(() => <ExplainDialog additive={additive} subtractive={subtractive} />);
+					}}
+					class="pl-2 pr-2 text-muted-fg hover:text-primary peer-placeholder-shown:block">
+					<VisibilityIcon />
 				</button>
 			</div>
 		</div>
