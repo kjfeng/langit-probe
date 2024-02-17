@@ -150,8 +150,6 @@ export const getTimeline: QueryFn<
 	let sliceFilter: SliceFilter | undefined | null;
 	let postFilter: PostFilter | undefined;
 
-	console.log(type)
-
 	if (!sessionStorage.getItem('round')) {
 		sessionStorage.setItem('round', '0')
 	}
@@ -291,6 +289,7 @@ export const getTimeline: QueryFn<
 				sessionStorage.setItem('searchIndex', '0')
 			}
 			let searchQueries = await generateSearchQueriesWithLLM(additiveUserPrompt)
+
 			let itemsAdded: TimelineSlice[] = []
 			for (const query of searchQueries) {
 				let searchPage = await fetchPage(agent, { type: 'search', query: query }, postsToAdd, undefined)
@@ -298,7 +297,7 @@ export const getTimeline: QueryFn<
 
 				if (slices.slice(searchIndex, searchIndex + postsToAdd)) {
 					itemsAdded.push(...slices.slice(searchIndex, searchIndex + postsToAdd))
-					sessionStorage.setItem('searchIndex', (searchIndex + postsToAdd).toString())
+					sessionStorage.setItem('searchIndex', (searchIndex + itemsAdded.length).toString())
 				}
 			}
 			additiveItems = itemsAdded
@@ -372,21 +371,21 @@ export const getTimelineLatest: QueryFn<FeedLatestResult, ReturnType<typeof getT
 };
 
 //// Raw fetch
-type SearchResult = PostSearchView[];
+// type SearchResult = PostSearchView[];
 
-interface PostSearchView {
-	tid: string;
-	cid: string;
-	user: {
-		did: DID;
-		handle: string;
-	};
-	post: {
-		createdAt: number;
-		text: string;
-		user: string;
-	};
-}
+// interface PostSearchView {
+// 	tid: string;
+// 	cid: string;
+// 	user: {
+// 		did: DID;
+// 		handle: string;
+// 	};
+// 	post: {
+// 		createdAt: number;
+// 		text: string;
+// 		user: string;
+// 	};
+// }
 
 const fetchPage = async (
 	agent: Agent,
@@ -421,7 +420,6 @@ const fetchPage = async (
 				limit: limit,
 			},
 		});
-		console.log(params.uri)
 
 		return response.data;
 	} else if (type === 'list') {
@@ -479,23 +477,34 @@ const fetchPage = async (
 		}
 	} else if (type === 'search') {
 		const offset = cursor ? +cursor : 0;
-		const searchUri =
-			`https://search.bsky.social/search/posts` +
-			`?count=${limit}` +
-			`&offset=${offset}` +
-			`&q=${encodeURIComponent(params.query)}`;
+		// const searchUri =
+		// 	`https://search.bsky.social/search/posts` +
+		// 	`?count=${limit}` +
+		// 	`&offset=${offset}` +
+		// 	`&q=${encodeURIComponent(params.query)}`;
 
-		const searchResponse = await fetch(searchUri);
+		// const searchResponse = await fetch(searchUri);
+		// const searchResults = (await searchResponse.json()) as SearchResult;
+		const searchResponse = await agent.rpc.get('app.bsky.feed.searchPosts', {
+			params: {
+				q: params.query,
+				cursor: cursor,
+				limit: limit,
+			},
+		});
 
-		if (!searchResponse.ok) {
-			throw new Error(`Response error ${searchResponse.status}`);
-		}
+		const searchResults = searchResponse.data;
 
-		const searchResults = (await searchResponse.json()) as SearchResult;
+		// if (!searchResponse.ok) {
+		// 	throw new Error(`Response error ${searchResponse.status}`);
+		// }
+
+		// const searchResults = (await searchResponse.json()) as SearchResult;
 
 		const uid = agent.session!.did;
 		const queries = await Promise.allSettled(
-			searchResults.map((view) => fetchPost([uid, `at://${view.user.did}/${view.tid}`])),
+			// searchResults.posts.map((view) => fetchPost([uid, `at://${view.author.did}/${view.cid}`])),
+			searchResults.posts.map((view) => fetchPost([uid, view.uri])),
 		);
 
 		const posts = queries
@@ -503,7 +512,7 @@ const fetchPage = async (
 			.map((result) => ({ post: result.value }));
 
 		return {
-			cursor: '' + (offset + searchResults.length),
+			cursor: '' + (offset + searchResults.posts.length),
 			feed: posts,
 		};
 	} else {
