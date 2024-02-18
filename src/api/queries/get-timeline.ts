@@ -29,6 +29,7 @@ import { PreferenceHide } from '../moderation/enums.ts';
 import { type Collection, pushCollection, randomlyInsertArray } from '../utils.ts';
 
 import { fetchPost } from './get-post.ts';
+import { posts } from '../cache/posts.ts';
 
 export interface HomeTimelineParams {
 	type: 'home';
@@ -279,25 +280,46 @@ export const getTimeline: QueryFn<
 			additiveUserPrompt += categorizedInputsObj.additive[i] + ". "
 		}
 		if (additiveUserPrompt) {
-			let searchIndex = 0
+			// let searchIndex = 0
 			if (itemsFiltered.length < MAX_POSTS) {
 				postsToAdd = MAX_POSTS - itemsFiltered.length
 			}
-			if (sessionStorage.getItem('searchIndex')) {
-				searchIndex = parseInt(sessionStorage.getItem('searchIndex')!)
-			} else {
-				sessionStorage.setItem('searchIndex', '0')
-			}
+			// if (sessionStorage.getItem('searchIndex')) {
+			// 	searchIndex = parseInt(sessionStorage.getItem('searchIndex')!)
+			// } else {
+			// 	sessionStorage.setItem('searchIndex', '0')
+			// }
 			let searchQueries = await generateSearchQueriesWithLLM(additiveUserPrompt)
 
 			let itemsAdded: TimelineSlice[] = []
 			for (const query of searchQueries) {
-				let searchPage = await fetchPage(agent, { type: 'search', query: query }, postsToAdd, undefined)
+				let searchIndex = 0
+				let searchIndexesObj: { [key: string]: string } = {}
+				if (sessionStorage.getItem('searchIndexes')) {
+					searchIndexesObj = JSON.parse(sessionStorage.getItem('searchIndexes')!)
+					if (searchIndexesObj[`${query}`]) {
+						searchIndex = parseInt(searchIndexesObj[`${query}`])
+					} else {
+						searchIndexesObj[`${query}`] = "0"
+						// sessionStorage.setItem('searchIndexes', JSON.stringify(searchIndexesObj))
+					}
+
+				}
+
+				// else {
+				// 	// initialize the searchIndexes object
+				// 	sessionStorage.setItem('searchIndexes', JSON.stringify({}))
+				// }
+
+				let searchPage = await fetchPage(agent, { type: 'search', query: query }, MAX_POSTS, undefined)
+
 				const slices = createTimelineSlices(uid, searchPage.feed, undefined, undefined)
+				console.log(slices.length)
 
 				if (slices.slice(searchIndex, searchIndex + postsToAdd)) {
 					itemsAdded.push(...slices.slice(searchIndex, searchIndex + postsToAdd))
-					sessionStorage.setItem('searchIndex', (searchIndex + itemsAdded.length).toString())
+					searchIndexesObj[`${query}`] = (searchIndex + itemsAdded.length).toString()
+					sessionStorage.setItem('searchIndexes', JSON.stringify(searchIndexesObj))
 				}
 			}
 			additiveItems = itemsAdded
